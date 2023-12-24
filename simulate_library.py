@@ -3,7 +3,10 @@ from dataclasses import dataclass
 from enum import Enum
 import numpy as np
 from bisect import insort
-import pandas as pd
+
+MAX_BORROW_BOOK = 2
+MAX_QUEUE_BOOK = 2
+MAX_BORROW_DURATION = 14 * 24
 
 @dataclass
 class Queue:
@@ -16,8 +19,8 @@ class Queue:
 class Loan:
     user_id: int
     book_id: int
-    start_time: float
-    return_time: Optional[float] = None
+    loan_start: float
+    loan_end: Optional[float] = None
     queue_id: Optional[float] = None
 
 @dataclass
@@ -51,17 +54,32 @@ def lend_book(
 
 def user_can_borrow(user_id: int, loans: list[Loan]) -> bool:
     current_loans = get_current_loans(user_id, loans)
-    if len(current_loans) >= 2:
+    if len(current_loans) >= MAX_BORROW_BOOK:
         return False
 
     return True
 
 def user_can_request_borrow(user_id: int, queues: list[Queue], loans: list[Loan]) -> bool:
     active_queues = get_active_queues(user_id, queues)
-    if len(active_queues) >= 2:
+    n_queues = len(active_queues)
+    if n_queues >= MAX_QUEUE_BOOK:
         return False
 
-    return user_can_borrow(user_id, loans)
+    current_loans = get_current_loans(user_id, loans)
+    n_loans = len(current_loans)
+    if n_loans >= MAX_BORROW_BOOK:
+        return False
+
+    # Without the following rule, a person currently queueing 1 book and
+    # holding MAX_BORROW_BOOK, and when the queued book finally made available
+    # the queued will never be freed if there's no one else returning that
+    # book. Hence we will forbid any borrow request with the following
+    # condition.
+
+    if (n_queues + n_loans) >= MAX_BORROW_BOOK:
+        return False
+
+    return True
 
 def return_book(
     loan_id: int,
@@ -77,7 +95,8 @@ def return_book(
     # print(f'Book returned: {loan_id=}, {time=:.4f}')
     book_id = loans[loan_id].book_id
     books[book_id].available_quantity += 1
-    loans[loan_id].return_time = time
+    loans[loan_id].loan_end = time
+
     for queue_id,queue in enumerate(queues):
         user_id = queue.user_id
         if queue.queue_end is not None: continue
@@ -103,7 +122,7 @@ def get_active_queues(user_id: int, queues: list[Queue]) -> list[Queue]:
 
 def get_current_loans(user_id: int, loans: list[Loan]) -> list[Loan]:
     current_loans = [loan for loan in loans if loan.user_id == user_id and
-                     loan.return_time is None]
+                     loan.loan_end is None]
     return current_loans
 
 def request_borrow(
@@ -127,6 +146,7 @@ def request_borrow(
 @dataclass
 class Event:
     time: float
+    detail: str
     execute: Callable[[list['Event']], None]
 
 def insert_event(event: Event, events: list[Event]) -> None:
@@ -145,14 +165,14 @@ def create_next_return_event(
     max_borrow_duration: float,
     events: list[Event],
 ) -> None:
-    borrow_duration = np.random.uniform(low=min_borrow_duration, high=max_borrow_duration)
-    return_time = time + borrow_duration
-    next_return_event = create_return_event(loan_id, return_time, loans, books, queues, min_borrow_duration, max_borrow_duration)
+    borrow_duration = np.clip(np.random.uniform(low=min_borrow_duration, high=max_borrow_duration), 0, MAX_BORROW_DURATION)
+    loan_end = time + borrow_duration
+    next_return_event = create_return_event(loan_id, loan_end, loans, books, queues, min_borrow_duration, max_borrow_duration)
     insert_event(next_return_event, events)
 
 def create_return_event(
     loan_id: int,
-    return_time: float,
+    loan_end: float,
     loans: list[Loan],
     books: list[Book],
     queues: list[Queue],
@@ -160,10 +180,11 @@ def create_return_event(
     max_borrow_duration: float,
 ) -> Event:
     def return_event(events):
-        next_loan_id = return_book(loan_id, return_time, loans, books, queues)
+        next_loan_id = return_book(loan_id, loan_end, loans, books, queues)
         if next_loan_id is None: return
-        create_next_return_event(next_loan_id, return_time, loans, books, queues, min_borrow_duration, max_borrow_duration, events)
-    return Event(return_time, return_event)
+        create_next_return_event(next_loan_id, loan_end, loans, books, queues, min_borrow_duration, max_borrow_duration, events)
+    detail = f'return_event({loan_id=}, {loan_end=})'
+    return Event(loan_end, detail, return_event)
 
 def create_request_borrow_event(
     time: float,
@@ -181,7 +202,8 @@ def create_request_borrow_event(
         (loan_id, status) = request_borrow(user_id, book_id, time, loans, queues, books)
         if status == RequestBorrowStatus.loaned:
             create_next_return_event(loan_id, time, loans, books, queues, min_borrow_duration, max_borrow_duration, events)
-    return Event(time, request_borrow_event)
+    detail = f'request_borrow_event({user_id=}, {book_id=})'
+    return Event(time, detail, request_borrow_event)
 
 def run_simulation(
     n_books: int,
@@ -250,6 +272,8 @@ def run_simulation(
     print()
     print(f'{num_episode=}')
 
+    # TODO raise error if check fails
+
     print('Checking that all books are returned...')
     for i,(book,total_quantity) in enumerate(zip(books, book_quantities)):
         if book.available_quantity != total_quantity:
@@ -260,25 +284,27 @@ def run_simulation(
         if queue.queue_end is None:
             print('-', i, queue)
 
-    print('Checking that all loans have return_time...')
+    print('Checking that all loans have loan_end...')
     for i,loan in enumerate(loans):
-        if loan.return_time is None:
+        if loan.loan_end is None:
             print('-', i, loan)
 
     return (books, queues, loans)
 
 if __name__ == '__main__':
+    import pandas as pd
+
     min_borrow_days = 1
     max_borrow_days = 14
     books, queues, loans = run_simulation(
-        n_books = 60,
+        n_books = 491,
         n_users = 300,
-        num_days = 360,
+        num_days = 365,
         min_borrow_duration = min_borrow_days * 24,
         max_borrow_duration = max_borrow_days * 24,
         min_book_qty = 3,
         max_book_qty = 10,
-        arrival_interval = 3, # customer arrive every _ hours
+        arrival_interval = 0.5, # customer arrive every _ hours
         seed = 300397,
     )
 
@@ -287,6 +313,6 @@ if __name__ == '__main__':
     print(f'{df_queues.shape=}')
     print(f'{df_loans.shape=}')
 
-    df_loans['borrow_duration'] = df_loans['return_time'] - df_loans['start_time']
+    df_loans['borrow_duration'] = df_loans['loan_end'] - df_loans['loan_start']
     df_queues['queue_duration'] = df_queues['queue_end'] - df_queues['queue_start']
 
