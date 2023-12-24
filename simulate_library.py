@@ -272,22 +272,28 @@ def run_simulation(
     print()
     print(f'{num_episode=}')
 
-    # TODO raise error if check fails
+    has_problem = False
 
     print('Checking that all books are returned...')
     for i,(book,total_quantity) in enumerate(zip(books, book_quantities)):
         if book.available_quantity != total_quantity:
             print(f'- {i}, {book.available_quantity=}, {total_quantity=}')
+            has_problem = True
 
     print('Checking that all queues are cleared up...')
     for i,queue in enumerate(queues):
         if queue.queue_end is None:
             print('-', i, queue)
+            has_problem = True
 
     print('Checking that all loans have loan_end...')
     for i,loan in enumerate(loans):
         if loan.loan_end is None:
             print('-', i, loan)
+            has_problem = True
+
+    if has_problem:
+        raise RuntimeError('The simulation has problems!')
 
     return (books, queues, loans)
 
