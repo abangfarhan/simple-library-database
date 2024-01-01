@@ -214,7 +214,7 @@ def run_simulation(
     min_book_qty: int,
     max_book_qty: int,
     arrival_interval: float, # customers arrive every how many hours (on average)?
-    seed: Optional[int],
+    seed: Optional[int]=None,
 ) -> tuple[
     list[Book],
     list[Queue],
