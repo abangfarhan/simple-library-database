@@ -131,6 +131,7 @@ if __name__ == '__main__':
         df = df.reset_index(drop=True)
         df[f'{id_prefix}_id'] = df.index
         cols = df.columns
+        # convert index columns to start with 1
         id_cols = cols[cols.str.endswith('_id')]
         for col in id_cols:
             df[col] = df[col] + 1
