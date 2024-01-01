@@ -19,7 +19,7 @@ left join books using(book_id)
 left join categories using(category_id)
 group by category_name
 order by loan_count desc
-limit 5
+limit 5;
 
 -- top 5 authors by number of borrows
 select author, count(*) as loan_count
@@ -27,7 +27,7 @@ from loans
 left join books using(book_id)
 group by author
 order by loan_count desc
-limit 5
+limit 5;
 
 -- average borrow duration
 select
@@ -35,7 +35,7 @@ select
 	min(loan_end::date - loan_start::date) as minimum_duration,
 	max(loan_end::date - loan_start::date) as maximum_duration
 from loans
-where loan_end is not null
+where loan_end is not null;
 
 -- most borrowed books each month
 select date, title, count
@@ -52,7 +52,7 @@ from (
 )
 left join books
 	using(book_id)
-where rank = 1
+where rank = 1;
 
 -- most borrowed categories each month
 select date, category_name, count
@@ -71,8 +71,9 @@ from (
 )
 left join categories
 	using(category_id)
-where rank = 1
--- only "Literature & Fiction"
+where rank = 1;
+
+-- why only "Literature & Fiction"?
 
 -- number of books in each category
 select category_name, count(*) as count
@@ -81,7 +82,7 @@ left join categories
 	using(category_id)
 group by category_name
 order by count desc
-limit 5
+limit 5;
 
 -- books that are borrowed the longest
 select title, author, avg_loan_duration
@@ -94,7 +95,7 @@ from (
 	order by avg_loan_duration desc
 	limit 10
 )
-left join books using(book_id)
+left join books using(book_id);
 
 -- avg, min & max queue waiting time
 select
@@ -102,4 +103,4 @@ select
 	min(queue_end - queue_start) as minimum,
 	max(queue_end - queue_start) as maximum
 from queues
-where queue_end is not null
+where queue_end is not null;
