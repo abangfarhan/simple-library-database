@@ -48,11 +48,11 @@ events that will happen if the application were to actually be implemented. For
 example, in case of a user requesting to borrow a book, the following events
 will be executed:
 
-![request borrow diagram]("/images/Pasted%20image%2020231229203401.png")
+![request borrow diagram](/images/Pasted%20image%2020231229203401.png)
 
 Meanwhile, the following events will be executed in case of user returning the
 borrowed book:
 
-![book return diagram]("/images/Pasted%20image%2020231229203425.png")
+![book return diagram](/images/Pasted%20image%2020231229203425.png)
 
 The simulation script can be found on `simulate_library.py`.
